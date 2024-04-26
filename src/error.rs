@@ -11,6 +11,9 @@ pub type MyResult<T> = core::result::Result<T, MyError>;
 pub enum MyError {
     ExampleError,
     AuthFailCtxNotInRequestExt,
+
+    BytesRejection { error: String },
+    ProtobufDecodeError { error: String },
 }
 
 impl IntoResponse for MyError {
@@ -36,8 +39,16 @@ impl MyError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ClientError::EXAMPLE_ERROR,
             ),
+            Self::BytesRejection { .. } => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ClientError::INVALID_PARAMS,
+            ),
+            Self::ProtobufDecodeError { .. } => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ClientError::INVALID_PARAMS,
+            ),
             // -- Auth
-            Self::AuthFailCtxNotInRequestExt => (StatusCode::FORBIDDEN, ClientError::AUTH),
+            Self::AuthFailCtxNotInRequestExt => (StatusCode::FORBIDDEN, ClientError::AUTH_ERROR),
             // -- Fallback
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -50,7 +61,8 @@ impl MyError {
 #[derive(Debug, AsRefStr)]
 #[allow(non_camel_case_types)]
 pub enum ClientError {
-    AUTH,
+    AUTH_ERROR,
     EXAMPLE_ERROR,
+    INVALID_PARAMS,
     SERVICE_ERROR,
 }

@@ -1,7 +1,7 @@
 use axum::{
     async_trait,
-    body::Body,
-    extract::{FromRequestParts, Request, State},
+    body::{Body, Bytes},
+    extract::{FromRequest, FromRequestParts, Request, State},
     http::{request::Parts, Method, Response, Uri},
     middleware::{self, Next},
     response::IntoResponse,
@@ -11,18 +11,19 @@ use axum::{
 use axum_extra::protobuf::Protobuf;
 use ctx::Ctx;
 use error::MyResult;
+use prost::Message;
 use serde_json::json;
 use tokio::net::TcpListener;
 use uuid::Uuid;
 
 use crate::{error::MyError, log::log_request, model::ModelController};
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+
+#[derive(prost::Message)]
 pub struct Test {
     #[prost(int64, required, tag = "1")]
     pub id: i64,
     #[prost(string, required, tag = "2")]
-    pub text: ::prost::alloc::string::String,
+    pub text: prost::alloc::string::String,
 }
 
 mod ctx;
@@ -46,19 +47,17 @@ async fn main() {
     axum::serve(listener, routes_all).await.unwrap();
 }
 
-async fn test(Protobuf(payload): Protobuf<Test>) -> MyResult<Protobuf<Test>> {
+async fn test(MyProtobuf(payload): MyProtobuf<Test>) -> Protobuf<Test> {
     println!("->> {:<12} - login", "HANDLER");
 
-    println!("id: {}", payload.id);
-
-    println!("text: {}", payload.text);
+    println!("payload: {:#?}", payload);
 
     let response = Test {
         id: 1,
         text: "Success".to_string(),
     };
 
-    Ok(Protobuf(response))
+    Protobuf(response)
 }
 
 async fn main_response_mapper(
@@ -124,5 +123,40 @@ impl<S: Send + Sync> FromRequestParts<S> for Ctx {
             .get::<MyResult<Ctx>>()
             .ok_or(MyError::AuthFailCtxNotInRequestExt)?
             .clone()
+    }
+}
+
+pub struct MyProtobuf<T>(Protobuf<T>);
+
+#[async_trait]
+impl<T, S> FromRequest<S> for MyProtobuf<T>
+where
+    T: Message + Default,
+    S: Send + Sync,
+{
+    type Rejection = MyError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        let bytes = match Bytes::from_request(req, state).await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                return Err(MyError::BytesRejection {
+                    error: e.to_string(),
+                })
+            }
+        };
+
+        if bytes.is_empty() {
+            return Err(MyError::BytesRejection {
+                error: "Empty request bytes".to_string(),
+            });
+        }
+
+        match T::decode(&mut bytes.clone()) {
+            Ok(value) => Ok(MyProtobuf(Protobuf(value))),
+            Err(err) => Err(MyError::ProtobufDecodeError {
+                error: err.to_string(),
+            }),
+        }
     }
 }
