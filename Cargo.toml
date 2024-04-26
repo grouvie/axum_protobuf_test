@@ -1,0 +1,17 @@
+[package]
+name = "axum_protobuf_test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.7.5", features = ["default", "macros"] }
+axum-extra = { version = "0.9.3", features = ["protobuf", "typed-header"] }
+prost = "0.12.4"
+serde = { version = "1.0.198", features = ["derive"] }
+serde_json = "1.0.116"
+serde_with = "3.8.0"
+strum = { version = "0.26.2", features = ["derive"] }
+strum_macros = "0.26.2"
+tokio = { version = "1.37.0", features = ["full"] }
+tower-http = { version = "0.5.2", features = ["fs"] }
+uuid = { version = "1.8.0", features = ["v4"] }
